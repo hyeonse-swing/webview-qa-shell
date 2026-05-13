@@ -2,6 +2,8 @@
 
 Native WebView test harness for checking a web service inside Android WebView and iOS WKWebView.
 
+Korean quickstart for non-developers: [QUICKSTART-KO.md](./QUICKSTART-KO.md)
+
 The project has two layers:
 
 - Root web app: optional QA Console served at `http://localhost:8090` by default.
@@ -36,7 +38,27 @@ The default QA console port is `8090`; `QA_PORT` is only a fallback for local co
 
 ## Run The Native App
 
-Start the target service first. By default the native shell opens:
+For non-developers or agent-driven usage, pass the staging URL directly:
+
+```bash
+pnpm install
+pnpm launch:ios https://stage.example.com
+pnpm launch:android https://stage.example.com
+```
+
+With Codex or another coding agent, ask:
+
+```text
+Open this staging URL in the iOS WebView: https://stage.example.com
+```
+
+If the URL has no scheme, `https://` is added automatically:
+
+```bash
+pnpm launch:ios stage.example.com
+```
+
+The older local workflow is still available. Start the target service first. By default the native shell opens:
 
 - iOS simulator: `http://localhost:8080`
 - Android emulator: `http://10.0.2.2:8080`
