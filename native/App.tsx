@@ -65,6 +65,7 @@ function WebViewShell() {
   const [inputUrl, setInputUrl] = useState(defaultUrl);
   const [activeUrl, setActiveUrl] = useState(defaultUrl);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [useNativeSafeArea, setUseNativeSafeArea] = useState(false);
   const [status, setStatus] = useState('Idle');
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -87,36 +88,56 @@ function WebViewShell() {
     setStatus(`${navigation.loading ? 'Loading' : 'Loaded'}: ${navigation.url}`);
   };
 
+  const toggleNativeSafeArea = () => {
+    setUseNativeSafeArea((current) => {
+      const next = !current;
+      setStatus(`Native safe area ${next ? 'enabled' : 'disabled'}`);
+      return next;
+    });
+  };
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-      <WebView
-        ref={webViewRef}
-        source={{ uri: activeUrl }}
-        originWhitelist={['*']}
-        javaScriptEnabled
-        domStorageEnabled
-        allowsBackForwardNavigationGestures
-        allowsInlineMediaPlayback
-        contentInsetAdjustmentBehavior="never"
-        mediaPlaybackRequiresUserAction={false}
-        mixedContentMode="never"
-        injectedJavaScript={injectedDiagnostics}
-        onLoadStart={() => setStatus('Load started')}
-        onLoadEnd={() => setStatus(`Load ended: ${activeUrl}`)}
-        onError={(event) => {
-          setStatus(`Error: ${event.nativeEvent.description}`);
-          setLastMessage(JSON.stringify(event.nativeEvent, null, 2));
-        }}
-        onHttpError={(event) => {
-          setStatus(`HTTP ${event.nativeEvent.statusCode}: ${event.nativeEvent.url}`);
-        }}
-        onMessage={(event) => {
-          setLastMessage(event.nativeEvent.data);
-        }}
-        onNavigationStateChange={onNavigationStateChange}
-        style={styles.webview}
-      />
+      <View
+        style={[
+          styles.webviewHost,
+          useNativeSafeArea && {
+            paddingTop: insets.top,
+            paddingRight: insets.right,
+            paddingBottom: insets.bottom,
+            paddingLeft: insets.left,
+          },
+        ]}
+      >
+        <WebView
+          ref={webViewRef}
+          source={{ uri: activeUrl }}
+          originWhitelist={['*']}
+          javaScriptEnabled
+          domStorageEnabled
+          allowsBackForwardNavigationGestures
+          allowsInlineMediaPlayback
+          contentInsetAdjustmentBehavior="never"
+          mediaPlaybackRequiresUserAction={false}
+          mixedContentMode="never"
+          injectedJavaScript={injectedDiagnostics}
+          onLoadStart={() => setStatus('Load started')}
+          onLoadEnd={() => setStatus(`Load ended: ${activeUrl}`)}
+          onError={(event) => {
+            setStatus(`Error: ${event.nativeEvent.description}`);
+            setLastMessage(JSON.stringify(event.nativeEvent, null, 2));
+          }}
+          onHttpError={(event) => {
+            setStatus(`HTTP ${event.nativeEvent.statusCode}: ${event.nativeEvent.url}`);
+          }}
+          onMessage={(event) => {
+            setLastMessage(event.nativeEvent.data);
+          }}
+          onNavigationStateChange={onNavigationStateChange}
+          style={styles.webview}
+        />
+      </View>
 
       {isPanelOpen ? (
         <View style={[styles.panel, { top: insets.top + 8, left: 10, right: 10 }]}>
@@ -127,6 +148,24 @@ function WebViewShell() {
             </View>
             <View style={styles.platformBadge}>
               <Text style={styles.platformText}>{Platform.OS}</Text>
+            </View>
+          </View>
+
+          <View style={styles.modeRow}>
+            <Text style={styles.modeLabel}>WebView frame</Text>
+            <View style={styles.segmentedControl}>
+              <TouchableOpacity
+                style={[styles.segmentButton, !useNativeSafeArea && styles.segmentButtonActive]}
+                onPress={() => setUseNativeSafeArea(false)}
+              >
+                <Text style={[styles.segmentText, !useNativeSafeArea && styles.segmentTextActive]}>Edge</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.segmentButton, useNativeSafeArea && styles.segmentButtonActive]}
+                onPress={() => setUseNativeSafeArea(true)}
+              >
+                <Text style={[styles.segmentText, useNativeSafeArea && styles.segmentTextActive]}>Safe</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -152,7 +191,11 @@ function WebViewShell() {
             <ControlButton label="Back" disabled={!canGoBack} onPress={() => webViewRef.current?.goBack()} />
             <ControlButton label="Fwd" disabled={!canGoForward} onPress={() => webViewRef.current?.goForward()} />
             <ControlButton label="Reload" onPress={() => webViewRef.current?.reload()} />
+          </View>
+
+          <View style={styles.controlRow}>
             <ControlButton label="8080" onPress={resetLocal} />
+            <ControlButton label={useNativeSafeArea ? 'Safe On' : 'Safe Off'} onPress={toggleNativeSafeArea} />
             <ControlButton label="Hide" onPress={() => setIsPanelOpen(false)} />
           </View>
 
@@ -216,6 +259,10 @@ const styles = StyleSheet.create({
     padding: 10,
     position: 'absolute',
   },
+  webviewHost: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#05080b',
+  },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -248,6 +295,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
+  },
+  modeRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  modeLabel: {
+    color: '#9cb1c2',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  segmentedControl: {
+    backgroundColor: '#17222d',
+    borderColor: '#2d4050',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    padding: 3,
+  },
+  segmentButton: {
+    alignItems: 'center',
+    borderRadius: 6,
+    minWidth: 66,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  segmentButtonActive: {
+    backgroundColor: '#f2b84b',
+  },
+  segmentText: {
+    color: '#9cb1c2',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  segmentTextActive: {
+    color: '#1d1608',
   },
   urlRow: {
     flexDirection: 'row',

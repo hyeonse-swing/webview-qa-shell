@@ -41,7 +41,12 @@ Start the target service first. By default the native shell opens:
 - iOS simulator: `http://localhost:8080`
 - Android emulator: `http://10.0.2.2:8080`
 
-The native shell renders the WebView edge-to-edge. It does not wrap the WebView in a native safe-area container, so the loaded web page can test notch, status bar, and bottom gesture areas directly. The QA controls are a small overlay; tap `QA` to open them and `Hide` to return to the fullscreen WebView.
+The native shell can switch the WebView frame between two modes from the `QA` overlay:
+
+- `Edge`: default mode. The WebView renders edge-to-edge so the loaded web page can test notch, status bar, and bottom gesture areas directly.
+- `Safe`: native safe-area mode. The app applies native safe-area insets around the WebView, so the loaded web page is prevented from drawing under unsafe areas.
+
+Tap `QA` to open the controls and `Hide` to return to the WebView.
 
 Then launch the native shell:
 
