@@ -4,6 +4,8 @@ Native WebView test harness for checking a web service inside Android WebView an
 
 Korean quickstart for non-developers: [QUICKSTART-KO.md](./QUICKSTART-KO.md)
 
+Setup guide for first-time iOS/Android simulator users: [SETUP-KO.md](./SETUP-KO.md)
+
 The project has two layers:
 
 - Root web app: optional QA Console served at `http://localhost:8090` by default.

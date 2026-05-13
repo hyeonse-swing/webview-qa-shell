@@ -2,6 +2,8 @@
 
 이 저장소는 스테이지 주소를 iOS/Android 네이티브 WebView에서 열어보는 테스트 앱입니다.
 
+처음 설치하는 사람은 먼저 [SETUP-KO.md](./SETUP-KO.md)를 확인하세요.
+
 ## Codex에 이렇게 요청하세요
 
 iOS로 열기:

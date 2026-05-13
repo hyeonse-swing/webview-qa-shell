@@ -2,6 +2,8 @@
 
 This repository is a native WebView tester for non-developers.
 
+Read `SETUP-KO.md` when the user is missing Node.js, pnpm, Xcode, iOS Simulator, Android Studio, or an Android Virtual Device.
+
 ## Default Task
 
 When a user gives a staging URL and asks to open or test it, launch the native WebView shell with that URL.
@@ -37,6 +39,7 @@ pnpm run doctor
 
 Then report the missing prerequisite in plain language, usually one of:
 
+- Node.js or pnpm is unavailable.
 - Xcode or iOS Simulator is unavailable.
 - Android Studio has no AVD.
 - Android SDK tools are not on the expected path.
