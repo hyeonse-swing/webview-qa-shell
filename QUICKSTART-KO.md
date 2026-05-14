@@ -55,7 +55,7 @@ pnpm launch:ios stage.example.com
 
 ## 앱에서 확인할 것
 
-앱 오른쪽 위 `QA` 버튼을 누르면 WebView 옵션을 바꿀 수 있습니다.
+`QA` 버튼을 누르면 WebView 옵션을 바꿀 수 있습니다. 버튼이 화면을 가리면 원하는 위치로 끌어서 옮길 수 있습니다.
 
 - `Edge`: WebView가 전체 화면으로 뜹니다. 웹에서 safe-area 처리를 직접 확인할 때 사용합니다.
 - `Safe`: 앱이 native safe-area를 적용합니다. 웹 화면이 notch/status/home 영역 안으로 들어오는지 확인할 때 사용합니다.

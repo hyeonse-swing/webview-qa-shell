@@ -28,6 +28,7 @@ Use the exact staging URL provided by the user. If the URL does not start with `
 - The in-app `QA` button exposes the WebView frame mode:
   - `Edge`: WebView draws edge-to-edge.
   - `Safe`: native safe-area insets are applied around the WebView.
+- The `QA` button is draggable. Tell users to move it if it covers the page content.
 
 ## If Something Fails
 

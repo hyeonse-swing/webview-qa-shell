@@ -1,11 +1,13 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  PanResponder,
   Platform,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,6 +52,23 @@ const injectedDiagnostics = `
   true;
 `;
 
+const FLOATING_TOGGLE_WIDTH = 52;
+const FLOATING_TOGGLE_HEIGHT = 42;
+const FLOATING_TOGGLE_MARGIN = 10;
+const FLOATING_TOGGLE_TAP_THRESHOLD = 6;
+
+type EdgeInsets = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+type FloatingPosition = {
+  x: number;
+  y: number;
+};
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -61,15 +80,78 @@ export default function App() {
 function WebViewShell() {
   const webViewRef = useRef<WebView>(null);
   const insets = useSafeAreaInsets();
+  const window = useWindowDimensions();
   const defaultUrl = useMemo(() => getDefaultLocalUrl(), []);
   const [inputUrl, setInputUrl] = useState(defaultUrl);
   const [activeUrl, setActiveUrl] = useState(defaultUrl);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [useNativeSafeArea, setUseNativeSafeArea] = useState(false);
+  const [floatingPosition, setFloatingPosition] = useState<FloatingPosition>(() =>
+    getDefaultFloatingPosition(window.width, window.height, insets),
+  );
   const [status, setStatus] = useState('Idle');
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [lastMessage, setLastMessage] = useState('No WebView messages yet');
+  const floatingPositionRef = useRef(floatingPosition);
+  const dragStartRef = useRef(floatingPosition);
+  const didMoveFloatingToggleRef = useRef(false);
+
+  useEffect(() => {
+    floatingPositionRef.current = floatingPosition;
+  }, [floatingPosition]);
+
+  useEffect(() => {
+    setFloatingPosition((current) => {
+      if (!didMoveFloatingToggleRef.current) {
+        return getDefaultFloatingPosition(window.width, window.height, insets);
+      }
+
+      return clampFloatingPosition(current, window.width, window.height, insets);
+    });
+  }, [insets.bottom, insets.left, insets.right, insets.top, window.height, window.width]);
+
+  const floatingPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2,
+        onPanResponderGrant: () => {
+          dragStartRef.current = floatingPositionRef.current;
+        },
+        onPanResponderMove: (_, gesture) => {
+          const nextPosition = clampFloatingPosition(
+            {
+              x: dragStartRef.current.x + gesture.dx,
+              y: dragStartRef.current.y + gesture.dy,
+            },
+            window.width,
+            window.height,
+            insets,
+          );
+
+          setFloatingPosition(nextPosition);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const didDrag =
+            Math.abs(gesture.dx) > FLOATING_TOGGLE_TAP_THRESHOLD ||
+            Math.abs(gesture.dy) > FLOATING_TOGGLE_TAP_THRESHOLD;
+
+          if (didDrag) {
+            didMoveFloatingToggleRef.current = true;
+            setStatus('QA button moved');
+            return;
+          }
+
+          setIsPanelOpen(true);
+        },
+        onPanResponderTerminate: () => {
+          setFloatingPosition((current) => clampFloatingPosition(current, window.width, window.height, insets));
+        },
+      }),
+    [insets.bottom, insets.left, insets.right, insets.top, window.height, window.width],
+  );
 
   const loadInputUrl = () => {
     setActiveUrl(normalizeUrl(inputUrl));
@@ -205,12 +287,14 @@ function WebViewShell() {
           </View>
         </View>
       ) : (
-        <TouchableOpacity
-          style={[styles.floatingToggle, { top: insets.top + 8, right: 10 }]}
-          onPress={() => setIsPanelOpen(true)}
+        <View
+          accessibilityLabel="Open QA panel"
+          accessibilityRole="button"
+          style={[styles.floatingToggle, { left: floatingPosition.x, top: floatingPosition.y }]}
+          {...floatingPanResponder.panHandlers}
         >
           <Text style={styles.floatingToggleText}>QA</Text>
-        </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -243,6 +327,39 @@ function normalizeUrl(value: string) {
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
 
   return `http://${trimmed}`;
+}
+
+function getDefaultFloatingPosition(width: number, height: number, insets: EdgeInsets): FloatingPosition {
+  return clampFloatingPosition(
+    {
+      x: width - insets.right - FLOATING_TOGGLE_MARGIN - FLOATING_TOGGLE_WIDTH,
+      y: insets.top + FLOATING_TOGGLE_MARGIN,
+    },
+    width,
+    height,
+    insets,
+  );
+}
+
+function clampFloatingPosition(
+  position: FloatingPosition,
+  width: number,
+  height: number,
+  insets: EdgeInsets,
+): FloatingPosition {
+  const minX = insets.left + FLOATING_TOGGLE_MARGIN;
+  const maxX = Math.max(minX, width - insets.right - FLOATING_TOGGLE_MARGIN - FLOATING_TOGGLE_WIDTH);
+  const minY = insets.top + FLOATING_TOGGLE_MARGIN;
+  const maxY = Math.max(minY, height - insets.bottom - FLOATING_TOGGLE_MARGIN - FLOATING_TOGGLE_HEIGHT);
+
+  return {
+    x: clamp(position.x, minX, maxX),
+    y: clamp(position.y, minY, maxY),
+  };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
 
 const styles = StyleSheet.create({
@@ -415,10 +532,16 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(148, 168, 188, 0.45)',
     borderRadius: 8,
     borderWidth: 1,
+    elevation: 12,
     justifyContent: 'center',
-    minHeight: 42,
-    minWidth: 52,
+    height: FLOATING_TOGGLE_HEIGHT,
     position: 'absolute',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    width: FLOATING_TOGGLE_WIDTH,
+    zIndex: 20,
   },
   floatingToggleText: {
     color: '#f4f7fb',

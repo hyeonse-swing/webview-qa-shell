@@ -70,7 +70,7 @@ The native shell can switch the WebView frame between two modes from the `QA` ov
 - `Edge`: default mode. The WebView renders edge-to-edge so the loaded web page can test notch, status bar, and bottom gesture areas directly.
 - `Safe`: native safe-area mode. The app applies native safe-area insets around the WebView, so the loaded web page is prevented from drawing under unsafe areas.
 
-Tap `QA` to open the controls and `Hide` to return to the WebView.
+Tap `QA` to open the controls and `Hide` to return to the WebView. The `QA` button can be dragged to another screen position if it covers content.
 
 Then launch the native shell:
 
