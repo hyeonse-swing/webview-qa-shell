@@ -1,9 +1,10 @@
 import { Platform } from 'react-native';
+import { isValidPort } from './targetUrl';
 
 export const TARGET_PORT = 8080;
 
 declare const process: {
-  env?: {
+  env: {
     EXPO_PUBLIC_TARGET_URL?: string;
     EXPO_PUBLIC_TARGET_PORT?: string;
     EXPO_PUBLIC_QA_PORT?: string;
@@ -11,14 +12,13 @@ declare const process: {
 };
 
 function getLocalPort() {
-  const rawPort = process.env?.EXPO_PUBLIC_TARGET_PORT ?? process.env?.EXPO_PUBLIC_QA_PORT;
-  const parsedPort = rawPort ? Number(rawPort) : TARGET_PORT;
-
-  return Number.isFinite(parsedPort) ? parsedPort : TARGET_PORT;
+  // Static dot notation is supported by Expo's environment-variable transform.
+  const rawPort = process.env.EXPO_PUBLIC_TARGET_PORT ?? process.env.EXPO_PUBLIC_QA_PORT;
+  return rawPort && isValidPort(rawPort) ? Number(rawPort) : TARGET_PORT;
 }
 
 export function getDefaultLocalUrl() {
-  const explicitTargetUrl = process.env?.EXPO_PUBLIC_TARGET_URL;
+  const explicitTargetUrl = process.env.EXPO_PUBLIC_TARGET_URL;
 
   if (explicitTargetUrl) {
     return explicitTargetUrl;

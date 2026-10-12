@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  BackHandler,
+  Keyboard,
   PanResponder,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -13,6 +16,8 @@ import {
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView, { type WebViewNavigation } from 'react-native-webview';
 import { getDefaultLocalUrl } from './src/localUrl';
+import { reduceLoadState, type LoadState } from './src/loadState';
+import { normalizeTargetUrl } from './src/targetUrl';
 
 const injectedDiagnostics = `
   (function () {
@@ -35,13 +40,20 @@ const injectedDiagnostics = `
     });
 
     window.addEventListener('error', function (event) {
+      if (event.target && event.target !== window) {
+        post('WEBVIEW_QA_RESOURCE_ERROR', {
+          url: event.target.src || event.target.href || '',
+          tagName: event.target.tagName || ''
+        });
+        return;
+      }
       post('WEBVIEW_QA_ERROR', {
         message: event.message,
         filename: event.filename,
         line: event.lineno,
         column: event.colno
       });
-    });
+    }, true);
 
     window.addEventListener('unhandledrejection', function (event) {
       post('WEBVIEW_QA_REJECTION', {
@@ -84,12 +96,15 @@ function WebViewShell() {
   const defaultUrl = useMemo(() => getDefaultLocalUrl(), []);
   const [inputUrl, setInputUrl] = useState(defaultUrl);
   const [activeUrl, setActiveUrl] = useState(defaultUrl);
+  const [webViewGeneration, setWebViewGeneration] = useState(0);
+  const [inputError, setInputError] = useState('');
+  const [loadState, setLoadState] = useState<LoadState>({ phase: 'idle', url: defaultUrl });
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [useNativeSafeArea, setUseNativeSafeArea] = useState(false);
   const [floatingPosition, setFloatingPosition] = useState<FloatingPosition>(() =>
     getDefaultFloatingPosition(window.width, window.height, insets),
   );
-  const [status, setStatus] = useState('Idle');
+  const [actionStatus, setActionStatus] = useState('');
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [lastMessage, setLastMessage] = useState('No WebView messages yet');
@@ -140,7 +155,7 @@ function WebViewShell() {
 
           if (didDrag) {
             didMoveFloatingToggleRef.current = true;
-            setStatus('QA button moved');
+            setActionStatus('QA button moved');
             return;
           }
 
@@ -154,29 +169,69 @@ function WebViewShell() {
   );
 
   const loadInputUrl = () => {
-    setActiveUrl(normalizeUrl(inputUrl));
-    setStatus('Loading requested URL');
+    try {
+      const nextUrl = normalizeTargetUrl(inputUrl);
+      setInputError('');
+      Keyboard.dismiss();
+      if (nextUrl === activeUrl) {
+        if (loadState.url === nextUrl) webViewRef.current?.reload();
+        else setWebViewGeneration((current) => current + 1);
+      } else {
+        setActiveUrl(nextUrl);
+      }
+      setActionStatus('Loading requested URL');
+    } catch (error) {
+      setInputError(error instanceof Error ? error.message : 'Enter a valid HTTP or HTTPS URL');
+    }
   };
 
-  const resetLocal = () => {
+  const resetStart = () => {
     setInputUrl(defaultUrl);
-    setActiveUrl(defaultUrl);
-    setStatus('Reset to local QA URL');
+    setInputError('');
+    if (activeUrl === defaultUrl && loadState.url === defaultUrl) webViewRef.current?.reload();
+    else if (activeUrl === defaultUrl) setWebViewGeneration((current) => current + 1);
+    else setActiveUrl(defaultUrl);
+    setActionStatus('Reset to start URL');
   };
 
   const onNavigationStateChange = (navigation: WebViewNavigation) => {
     setCanGoBack(navigation.canGoBack);
     setCanGoForward(navigation.canGoForward);
-    setStatus(`${navigation.loading ? 'Loading' : 'Loaded'}: ${navigation.url}`);
+    setLoadState((current) => reduceLoadState(current, {
+      type: 'navigation', url: navigation.url, loading: navigation.loading,
+    }));
   };
 
   const toggleNativeSafeArea = () => {
     setUseNativeSafeArea((current) => {
       const next = !current;
-      setStatus(`Native safe area ${next ? 'enabled' : 'disabled'}`);
+      setActionStatus(`Native safe area ${next ? 'enabled' : 'disabled'}`);
       return next;
     });
   };
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isPanelOpen) {
+        setIsPanelOpen(false);
+        return true;
+      }
+      if (canGoBack) {
+        webViewRef.current?.goBack();
+        return true;
+      }
+      return false;
+    });
+    return () => subscription.remove();
+  }, [isPanelOpen, canGoBack]);
+
+  const retryLoad = () => webViewRef.current?.reload();
+  const status = loadState.phase === 'error'
+    ? loadState.message
+    : loadState.phase === 'idle'
+      ? 'Idle'
+      : `${loadState.phase === 'loading' ? 'Loading' : 'Loaded'}: ${loadState.url}`;
 
   return (
     <View style={styles.root}>
@@ -193,6 +248,7 @@ function WebViewShell() {
         ]}
       >
         <WebView
+          key={webViewGeneration}
           ref={webViewRef}
           source={{ uri: activeUrl }}
           originWhitelist={['*']}
@@ -204,14 +260,29 @@ function WebViewShell() {
           mediaPlaybackRequiresUserAction={false}
           mixedContentMode="never"
           injectedJavaScript={injectedDiagnostics}
-          onLoadStart={() => setStatus('Load started')}
-          onLoadEnd={() => setStatus(`Load ended: ${activeUrl}`)}
+          onLoadStart={(event) => setLoadState((current) => reduceLoadState(current, {
+            type: 'start', url: event.nativeEvent.url,
+          }))}
+          onLoadEnd={(event) => setLoadState((current) => reduceLoadState(current, {
+            type: 'end', url: event.nativeEvent.url,
+          }))}
           onError={(event) => {
-            setStatus(`Error: ${event.nativeEvent.description}`);
+            setLoadState((current) => reduceLoadState(current, {
+              type: 'error', url: event.nativeEvent.url,
+              message: `Error: ${event.nativeEvent.description}`,
+            }));
             setLastMessage(JSON.stringify(event.nativeEvent, null, 2));
           }}
           onHttpError={(event) => {
-            setStatus(`HTTP ${event.nativeEvent.statusCode}: ${event.nativeEvent.url}`);
+            setLoadState((current) => reduceLoadState(current, {
+              type: 'error', url: event.nativeEvent.url,
+              message: `HTTP ${event.nativeEvent.statusCode}: ${event.nativeEvent.url}`,
+            }));
+            setLastMessage(JSON.stringify(event.nativeEvent, null, 2));
+          }}
+          onLoadSubResourceError={(event) => {
+            setLoadState((current) => reduceLoadState(current, { type: 'subresourceError' }));
+            setLastMessage(JSON.stringify(event.nativeEvent, null, 2));
           }}
           onMessage={(event) => {
             setLastMessage(event.nativeEvent.data);
@@ -221,8 +292,22 @@ function WebViewShell() {
         />
       </View>
 
+      {loadState.phase === 'error' && !isPanelOpen && (
+        <View style={[styles.errorBanner, { bottom: insets.bottom + 10 }]} accessibilityRole="alert">
+          <Text style={styles.errorText} numberOfLines={2}>{loadState.message}</Text>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Retry loading page" onPress={retryLoad} style={styles.retryButton}>
+            <Text style={styles.primaryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {isPanelOpen ? (
-        <View style={[styles.panel, { top: insets.top + 8, left: 10, right: 10 }]}>
+        <ScrollView
+          style={[styles.panel, { top: insets.top + 8, left: 10, right: 10,
+            maxHeight: Math.max(100, window.height - insets.top - insets.bottom - 16) }]}
+          contentContainerStyle={styles.panelContent}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.header}>
             <View>
               <Text style={styles.eyebrow}>Native WebView Shell</Text>
@@ -239,12 +324,18 @@ function WebViewShell() {
               <TouchableOpacity
                 style={[styles.segmentButton, !useNativeSafeArea && styles.segmentButtonActive]}
                 onPress={() => setUseNativeSafeArea(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Edge WebView frame"
+                accessibilityState={{ selected: !useNativeSafeArea }}
               >
                 <Text style={[styles.segmentText, !useNativeSafeArea && styles.segmentTextActive]}>Edge</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.segmentButton, useNativeSafeArea && styles.segmentButtonActive]}
                 onPress={() => setUseNativeSafeArea(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Safe WebView frame"
+                accessibilityState={{ selected: useNativeSafeArea }}
               >
                 <Text style={[styles.segmentText, useNativeSafeArea && styles.segmentTextActive]}>Safe</Text>
               </TouchableOpacity>
@@ -254,42 +345,48 @@ function WebViewShell() {
           <View style={styles.urlRow}>
             <TextInput
               value={inputUrl}
-              onChangeText={setInputUrl}
+              onChangeText={(value) => { setInputUrl(value); setInputError(''); }}
+              accessibilityLabel="WebView URL"
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
               returnKeyType="go"
               onSubmitEditing={loadInputUrl}
               style={styles.input}
-              placeholder="http://localhost:8080"
+              placeholder="https://stage.example.com"
               placeholderTextColor="#7f8b99"
             />
-            <TouchableOpacity style={styles.primaryButton} onPress={loadInputUrl}>
+            <TouchableOpacity style={styles.primaryButton} onPress={loadInputUrl} accessibilityRole="button" accessibilityLabel="Load URL">
               <Text style={styles.primaryButtonText}>Load</Text>
             </TouchableOpacity>
           </View>
+          {inputError ? <Text style={styles.inputError} accessibilityRole="alert">{inputError}</Text> : null}
 
           <View style={styles.controlRow}>
             <ControlButton label="Back" disabled={!canGoBack} onPress={() => webViewRef.current?.goBack()} />
             <ControlButton label="Fwd" disabled={!canGoForward} onPress={() => webViewRef.current?.goForward()} />
-            <ControlButton label="Reload" onPress={() => webViewRef.current?.reload()} />
+            <ControlButton label={loadState.phase === 'error' ? 'Retry' : 'Reload'} onPress={retryLoad} />
           </View>
 
           <View style={styles.controlRow}>
-            <ControlButton label="8080" onPress={resetLocal} />
+            <ControlButton label="Start" onPress={resetStart} />
             <ControlButton label={useNativeSafeArea ? 'Safe On' : 'Safe Off'} onPress={toggleNativeSafeArea} />
             <ControlButton label="Hide" onPress={() => setIsPanelOpen(false)} />
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.status} numberOfLines={1}>{status}</Text>
+            <Text style={styles.status} numberOfLines={loadState.phase === 'error' ? 3 : 1}>{status}</Text>
+            {actionStatus ? <Text style={styles.message} numberOfLines={1}>{actionStatus}</Text> : null}
             <Text style={styles.message} numberOfLines={2}>{lastMessage}</Text>
           </View>
-        </View>
+        </ScrollView>
       ) : (
         <View
+          accessible
           accessibilityLabel="Open QA panel"
           accessibilityRole="button"
+          accessibilityActions={[{ name: 'activate' }]}
+          onAccessibilityAction={() => setIsPanelOpen(true)}
           style={[styles.floatingToggle, { left: floatingPosition.x, top: floatingPosition.y }]}
           {...floatingPanResponder.panHandlers}
         >
@@ -314,19 +411,13 @@ function ControlButton({
       style={[styles.controlButton, disabled && styles.controlButtonDisabled]}
       onPress={onPress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
     >
       <Text style={[styles.controlButtonText, disabled && styles.controlButtonTextDisabled]}>{label}</Text>
     </TouchableOpacity>
   );
-}
-
-function normalizeUrl(value: string) {
-  const trimmed = value.trim();
-
-  if (!trimmed) return getDefaultLocalUrl();
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-
-  return `http://${trimmed}`;
 }
 
 function getDefaultFloatingPosition(width: number, height: number, insets: EdgeInsets): FloatingPosition {
@@ -372,9 +463,40 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(148, 168, 188, 0.35)',
     borderRadius: 8,
     borderWidth: 1,
+    position: 'absolute',
+  },
+  panelContent: {
     gap: 10,
     padding: 10,
+  },
+  errorBanner: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 24, 32, 0.96)',
+    borderColor: '#e68f72',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    left: 10,
+    padding: 10,
     position: 'absolute',
+    right: 10,
+    zIndex: 10,
+  },
+  errorText: {
+    color: '#ffe2d7',
+    flex: 1,
+    fontSize: 12,
+  },
+  retryButton: {
+    backgroundColor: '#f2b84b',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  inputError: {
+    color: '#ffe2d7',
+    fontSize: 12,
   },
   webviewHost: {
     ...StyleSheet.absoluteFillObject,

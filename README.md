@@ -72,6 +72,10 @@ The native shell can switch the WebView frame between two modes from the `QA` ov
 
 Tap `QA` to open the controls and `Hide` to return to the WebView. The `QA` button can be dragged to another screen position if it covers content.
 
+The URL field defaults bare staging hostnames to HTTPS. In this field, loopback, private IPv4, and `.local` hostnames default to HTTP for local development. Explicit HTTP/HTTPS links keep their paths and query strings unchanged; invalid input displays a message without replacing the page.
+
+`Start` returns to the URL used to launch the app, including a staging URL. Network and main-page HTTP failures remain visible with a `Retry` action even when the QA panel is closed. Android subresource SSL errors are reported in diagnostics without blocking the whole page. On Android, hardware Back closes an open QA panel first, then navigates WebView history. The panel scrolls on short or landscape screens.
+
 Then launch the native shell:
 
 ```bash
@@ -85,6 +89,8 @@ Useful checks:
 pnpm run doctor
 pnpm android:avds
 ```
+
+If Node.js or pnpm is missing, run `bash scripts/doctor.sh` directly. The doctor continues through all checks when an individual tool fails and reports dependency installation state as well as available simulators/emulators.
 
 Pick a specific simulator or AVD:
 
