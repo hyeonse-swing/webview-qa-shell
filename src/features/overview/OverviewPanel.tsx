@@ -1,6 +1,7 @@
 import { Copy, RefreshCw, Send } from 'lucide-react';
 import { postToNativeBridge } from '../../shared/nativeBridge';
-import { copyText, createQaReportText } from '../../shared/qaReport';
+import { createQaReportText } from '../../shared/qaReport';
+import { useCopyFeedback } from '../../shared/useCopyFeedback';
 import { formatBoolean, formatJson } from '../../shared/format';
 import type { LogEntry, RuntimeSnapshot } from '../../shared/types';
 import type { AddLog } from '../logs/logStore';
@@ -13,10 +14,7 @@ interface OverviewPanelProps {
 }
 
 export function OverviewPanel({ snapshot, logs, addLog, refreshSnapshot }: OverviewPanelProps) {
-  const copyReport = async () => {
-    await copyText(createQaReportText(snapshot, logs));
-    addLog('report', 'success', 'Copied QA report');
-  };
+  const { copy, feedback } = useCopyFeedback('report', 'Copied QA report', 'Could not copy QA report', addLog);
 
   const sendBridgeProbe = () => {
     const bridge = postToNativeBridge({ type: 'WEBVIEW_QA_PROBE', snapshot });
@@ -35,10 +33,13 @@ export function OverviewPanel({ snapshot, logs, addLog, refreshSnapshot }: Overv
             <RefreshCw size={16} />
             Refresh
           </button>
-          <button type="button" onClick={copyReport}>
+          <button type="button" onClick={() => copy(createQaReportText(snapshot, logs))} aria-disabled={feedback.pending}>
             <Copy size={16} />
             Copy QA Report
           </button>
+          <span role="status" className={feedback.text ? `status status--${feedback.failed ? 'fail' : 'pass'}` : ''}>
+            {feedback.text}
+          </span>
           <button type="button" onClick={sendBridgeProbe}>
             <Send size={16} />
             Bridge Probe

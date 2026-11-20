@@ -2,7 +2,7 @@
   "expo": {
     "name": "WebView QA Shell",
     "slug": "webview-qa-shell",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "ios": {

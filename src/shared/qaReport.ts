@@ -16,19 +16,28 @@ export function createQaReportText(snapshot: RuntimeSnapshot, logs: LogEntry[]) 
 
 export async function copyText(text: string) {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return 'clipboard';
+    try {
+      await navigator.clipboard.writeText(text);
+      return 'clipboard';
+    } catch {
+      // Some WebViews expose the API but deny clipboard access.
+    }
   }
 
+  const previousFocus = document.activeElement as HTMLElement | null;
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.setAttribute('readonly', 'true');
   textarea.style.position = 'fixed';
   textarea.style.opacity = '0';
   document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand('copy');
-  textarea.remove();
+  try {
+    textarea.select();
+    if (!document.execCommand('copy')) throw new Error('Copy failed');
+  } finally {
+    textarea.remove();
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+  }
 
   return 'fallback';
 }

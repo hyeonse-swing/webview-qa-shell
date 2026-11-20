@@ -1,5 +1,6 @@
 import { Copy, RefreshCw } from 'lucide-react';
-import { copyText, createQaReportText } from '../../shared/qaReport';
+import { createQaReportText } from '../../shared/qaReport';
+import { useCopyFeedback } from '../../shared/useCopyFeedback';
 import type { LogEntry, PlatformMode, RuntimeSnapshot } from '../../shared/types';
 import type { AddLog } from '../../features/logs/logStore';
 
@@ -20,10 +21,7 @@ export function HeaderStatus({
   refreshSnapshot,
   addLog,
 }: HeaderStatusProps) {
-  const copyReport = async () => {
-    await copyText(createQaReportText(snapshot, logs));
-    addLog('report', 'success', 'Copied QA report from header');
-  };
+  const { copy, feedback } = useCopyFeedback('report', 'Copied QA report from header', 'Could not copy QA report from header', addLog);
 
   return (
     <header className="app-header">
@@ -51,10 +49,13 @@ export function HeaderStatus({
         <button className="icon-button" type="button" onClick={refreshSnapshot} aria-label="Refresh runtime snapshot">
           <RefreshCw size={16} />
         </button>
-        <button type="button" onClick={copyReport}>
+        <button type="button" onClick={() => copy(createQaReportText(snapshot, logs))} aria-disabled={feedback.pending}>
           <Copy size={16} />
           Copy Report
         </button>
+        <span role="status" className={feedback.text ? `status status--${feedback.failed ? 'fail' : 'pass'}` : ''}>
+          {feedback.text}
+        </span>
       </div>
     </header>
   );

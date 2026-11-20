@@ -37,3 +37,32 @@ test('runs navigation actions without leaving the app shell', async ({ page }) =
   await expect(page).toHaveURL(/qa-nav=push/);
   await expect(page.getByTestId('navigation-panel')).toBeVisible();
 });
+
+test('reports a clipboard failure instead of claiming the QA report was copied', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    document.execCommand = () => false;
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Copy Report', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Could not copy QA report from header' })).toBeVisible();
+  await page.getByRole('button', { name: /Logs/ }).click();
+
+  const eventLog = page.getByRole('main').getByTestId('event-log');
+  await expect(eventLog.getByText('Could not copy QA report from header')).toBeVisible();
+  await expect(eventLog.getByText('Copied QA report from header')).toHaveCount(0);
+});
+
+test('legacy copy keeps keyboard focus and shows success beside the button', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    document.execCommand = () => true;
+  });
+  await page.goto('/');
+  const button = page.getByRole('button', { name: 'Copy Report', exact: true });
+  await button.focus();
+  await page.keyboard.press('Enter');
+
+  await expect(page.getByRole('status').filter({ hasText: 'Copied QA report from header' })).toBeVisible();
+  await expect(button).toBeFocused();
+});
