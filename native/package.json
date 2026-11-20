@@ -1,7 +1,7 @@
 {
   "name": "webview-qa-native-shell",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "expo/AppEntry",
   "scripts": {
     "start": "expo start",

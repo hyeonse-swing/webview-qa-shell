@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   BackHandler,
   Keyboard,
@@ -16,7 +16,7 @@ import {
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import WebView, { type WebViewNavigation } from 'react-native-webview';
 import { getDefaultLocalUrl } from './src/localUrl';
-import { reduceLoadState, type LoadState } from './src/loadState';
+import { reduceLoadState } from './src/loadState';
 import { normalizeTargetUrl } from './src/targetUrl';
 
 const injectedDiagnostics = `
@@ -98,7 +98,7 @@ function WebViewShell() {
   const [activeUrl, setActiveUrl] = useState(defaultUrl);
   const [webViewGeneration, setWebViewGeneration] = useState(0);
   const [inputError, setInputError] = useState('');
-  const [loadState, setLoadState] = useState<LoadState>({ phase: 'idle', url: defaultUrl });
+  const [loadState, dispatchLoad] = useReducer(reduceLoadState, { phase: 'idle', url: defaultUrl });
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [useNativeSafeArea, setUseNativeSafeArea] = useState(false);
   const [floatingPosition, setFloatingPosition] = useState<FloatingPosition>(() =>
@@ -197,9 +197,9 @@ function WebViewShell() {
   const onNavigationStateChange = (navigation: WebViewNavigation) => {
     setCanGoBack(navigation.canGoBack);
     setCanGoForward(navigation.canGoForward);
-    setLoadState((current) => reduceLoadState(current, {
+    dispatchLoad({
       type: 'navigation', url: navigation.url, loading: navigation.loading,
-    }));
+    });
   };
 
   const toggleNativeSafeArea = () => {
@@ -260,28 +260,28 @@ function WebViewShell() {
           mediaPlaybackRequiresUserAction={false}
           mixedContentMode="never"
           injectedJavaScript={injectedDiagnostics}
-          onLoadStart={(event) => setLoadState((current) => reduceLoadState(current, {
+          onLoadStart={(event) => dispatchLoad({
             type: 'start', url: event.nativeEvent.url,
-          }))}
-          onLoadEnd={(event) => setLoadState((current) => reduceLoadState(current, {
+          })}
+          onLoadEnd={(event) => dispatchLoad({
             type: 'end', url: event.nativeEvent.url,
-          }))}
+          })}
           onError={(event) => {
-            setLoadState((current) => reduceLoadState(current, {
+            dispatchLoad({
               type: 'error', url: event.nativeEvent.url,
               message: `Error: ${event.nativeEvent.description}`,
-            }));
+            });
             setLastMessage(JSON.stringify(event.nativeEvent, null, 2));
           }}
           onHttpError={(event) => {
-            setLoadState((current) => reduceLoadState(current, {
+            dispatchLoad({
               type: 'error', url: event.nativeEvent.url,
               message: `HTTP ${event.nativeEvent.statusCode}: ${event.nativeEvent.url}`,
-            }));
+            });
             setLastMessage(JSON.stringify(event.nativeEvent, null, 2));
           }}
           onLoadSubResourceError={(event) => {
-            setLoadState((current) => reduceLoadState(current, { type: 'subresourceError' }));
+            dispatchLoad({ type: 'subresourceError' });
             setLastMessage(JSON.stringify(event.nativeEvent, null, 2));
           }}
           onMessage={(event) => {
