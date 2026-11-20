@@ -20,10 +20,28 @@ describe('WebView load state', () => {
     const failed = reduceLoadState(initial, {
       type: 'error', url: initial.url, message: 'HTTP 503: https://stage.example.com',
     });
+    expect(reduceLoadState(failed, { type: 'history', url: initial.url })).toEqual(failed);
     expect(reduceLoadState(failed, { type: 'end', url: initial.url })).toEqual(failed);
     expect(reduceLoadState(failed, {
       type: 'navigation', url: initial.url, loading: false,
     })).toEqual(failed);
+  });
+
+  it('keeps Retry available after Android reports a connection refusal and then updates history', () => {
+    const url = initial.url;
+    const failure = reduceLoadState(initial, {
+      type: 'error', url, message: 'Error: net::ERR_CONNECTION_REFUSED',
+    });
+    const end = reduceLoadState(failure, { type: 'end', url });
+    const history = reduceLoadState(end, { type: 'history', url });
+    const settled = reduceLoadState(history, { type: 'navigation', url, loading: false });
+    expect(settled).toEqual(failure);
+
+    const retry = reduceLoadState(settled, { type: 'start', url });
+    const reloaded = reduceLoadState(retry, { type: 'history', url });
+    expect(reduceLoadState(reloaded, { type: 'end', url })).toMatchObject({ phase: 'loaded', url });
+    const otherUrl = 'https://stage.example.com/other';
+    expect(reduceLoadState(settled, { type: 'history', url: otherUrl })).toMatchObject({ phase: 'loading', url: otherUrl });
   });
 
   it('records subresource failures only as diagnostics', () => {

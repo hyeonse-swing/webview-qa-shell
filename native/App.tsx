@@ -168,17 +168,19 @@ function WebViewShell() {
     [insets.bottom, insets.left, insets.right, insets.top, window.height, window.width],
   );
 
+  const loadTarget = (url: string) => {
+    dispatchLoad({ type: 'start', url });
+    if (activeUrl !== url) setActiveUrl(url);
+    else if (loadState.url === url) webViewRef.current?.reload();
+    else setWebViewGeneration((current) => current + 1);
+  };
+
   const loadInputUrl = () => {
     try {
       const nextUrl = normalizeTargetUrl(inputUrl);
       setInputError('');
       Keyboard.dismiss();
-      if (nextUrl === activeUrl) {
-        if (loadState.url === nextUrl) webViewRef.current?.reload();
-        else setWebViewGeneration((current) => current + 1);
-      } else {
-        setActiveUrl(nextUrl);
-      }
+      loadTarget(nextUrl);
       setActionStatus('Loading requested URL');
     } catch (error) {
       setInputError(error instanceof Error ? error.message : 'Enter a valid HTTP or HTTPS URL');
@@ -188,9 +190,7 @@ function WebViewShell() {
   const resetStart = () => {
     setInputUrl(defaultUrl);
     setInputError('');
-    if (activeUrl === defaultUrl && loadState.url === defaultUrl) webViewRef.current?.reload();
-    else if (activeUrl === defaultUrl) setWebViewGeneration((current) => current + 1);
-    else setActiveUrl(defaultUrl);
+    loadTarget(defaultUrl);
     setActionStatus('Reset to start URL');
   };
 
@@ -226,7 +226,10 @@ function WebViewShell() {
     return () => subscription.remove();
   }, [isPanelOpen, canGoBack]);
 
-  const retryLoad = () => webViewRef.current?.reload();
+  const retryLoad = () => {
+    dispatchLoad({ type: 'start', url: loadState.url });
+    webViewRef.current?.reload();
+  };
   const status = loadState.phase === 'error'
     ? loadState.message
     : loadState.phase === 'idle'
@@ -261,7 +264,7 @@ function WebViewShell() {
           mixedContentMode="never"
           injectedJavaScript={injectedDiagnostics}
           onLoadStart={(event) => dispatchLoad({
-            type: 'start', url: event.nativeEvent.url,
+            type: Platform.OS === 'android' ? 'history' : 'start', url: event.nativeEvent.url,
           })}
           onLoadEnd={(event) => dispatchLoad({
             type: 'end', url: event.nativeEvent.url,

@@ -6,16 +6,21 @@ export type LoadState =
 
 export type LoadEvent =
   | { type: 'start'; url: string }
+  | { type: 'history'; url: string }
   | { type: 'end'; url: string }
   | { type: 'navigation'; url: string; loading: boolean }
   | { type: 'error'; url: string; message: string }
   | { type: 'subresourceError' };
 
 export function reduceLoadState(state: LoadState, event: LoadEvent): LoadState {
-  if (event.type === 'start') return {
-    phase: 'loading', url: event.url,
-    previousUrl: event.url === state.url ? state.previousUrl : state.url,
-  };
+  if (event.type === 'start' || event.type === 'history') {
+    // Android can report the failed page's history entry after reporting the error.
+    if (event.type === 'history' && state.phase === 'error' && event.url === state.url) return state;
+    return {
+      phase: 'loading', url: event.url,
+      previousUrl: event.url === state.url ? state.previousUrl : state.url,
+    };
+  }
   if (event.type === 'subresourceError') return state;
 
   // A previous page can still emit its terminal callback after a newer page
